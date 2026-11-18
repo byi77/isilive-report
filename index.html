@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>isiLive Bug Report</title>
+<meta name="description" content="Send an isiLive bug report: paste the text from /isilive report and click Send.">
+<style>
+  :root {
+    --bg: #0e1016;
+    --surface: #161a23;
+    --surface-2: #1d2230;
+    --border: #2a3142;
+    --text: #e3e6ee;
+    --muted: #8b93a7;
+    --accent: #4da3ff;
+    --accent-press: #2f86e6;
+    --ok: #4cc38a;
+    --warn: #f0b44c;
+    --bad: #ef6b6b;
+    --mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .2px; }
+  h1 span { color: var(--accent); }
+  .lead { color: var(--muted); margin: 0 0 24px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  label { display: block; font-weight: 600; margin-bottom: 6px; }
+  .hint { color: var(--muted); font-size: 13px; font-weight: 400; }
+  textarea, input[type=text] {
+    width: 100%;
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font: inherit;
+  }
+  textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+  #code { font-family: var(--mono); font-size: 12px; min-height: 96px; resize: vertical; word-break: break-all; }
+  #desc { min-height: 80px; resize: vertical; }
+  .status { margin-top: 10px; font-size: 14px; min-height: 21px; }
+  .status.ok { color: var(--ok); }
+  .status.warn { color: var(--warn); }
+  .status.bad { color: var(--bad); }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  pre {
+    margin: 8px 0 0;
+    max-height: 320px;
+    overflow: auto;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font: 12px/1.45 var(--mono);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 10px 22px;
+    border: 1px solid transparent;
+    cursor: pointer;
+  }
+  #send { background: var(--accent); color: #06111f; }
+  #send:hover:not(:disabled) { background: var(--accent-press); }
+  #send:disabled { background: var(--surface-2); color: var(--muted); border-color: var(--border); cursor: not-allowed; }
+  #download { background: transparent; color: var(--text); border-color: var(--border); }
+  #download[hidden] { display: none; }
+  .privacy { color: var(--muted); font-size: 13px; }
+  .bot { position: absolute; left: -9999px; }
+  footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+  @media (max-width: 480px) { main { padding-top: 20px; } button { width: 100%; } }
+</style>
+</head>
+<body>
+<main>
+  <h1><span>isiLive</span> <span id="t-title" style="color:inherit">Bug report</span></h1>
+  <p class="lead" id="t-lead">In game: type /isilive report, press Ctrl+C, then paste here and click Send.</p>
+
+  <div class="card">
+    <label for="code" id="t-code">Report text</label>
+    <textarea id="code" spellcheck="false" autocomplete="off" placeholder="!isiLive:1!…!End:isiLive:1!"></textarea>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+    <details id="previewBox" hidden>
+      <summary id="t-preview">Show what will be sent</summary>
+      <pre id="preview"></pre>
+    </details>
+  </div>
+
+  <div class="card">
+    <label for="desc"><span id="t-desc">What happened?</span> <span class="hint" id="t-optional">(optional)</span></label>
+    <textarea id="desc" maxlength="2000"></textarea>
+    <label for="contact" style="margin-top:12px"><span id="t-contact">Contact for questions</span> <span class="hint" id="t-contact-hint">(optional, e.g. Discord or e-mail)</span></label>
+    <input type="text" id="contact" maxlength="120" autocomplete="off">
+    <input type="checkbox" name="botcheck" id="botcheck" class="bot" tabindex="-1" aria-hidden="true">
+  </div>
+
+  <div class="row">
+    <button id="send" disabled>Send</button>
+    <button id="download" hidden>Download as file</button>
+  </div>
+  <div class="status" id="sendStatus" role="status" aria-live="polite"></div>
+
+  <p class="privacy" id="t-privacy">The report is only used to fix bugs. Character names are already replaced in game (SELF, P1, P2, …). It is sent by e-mail to the developer and deleted once the bug is fixed.</p>
+  <footer>isiLive</footer>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  // Web3Forms access key (public by design: it can only send mail to the
+  // address it was created for).
+  const ACCESS_KEY = "REPLACE_WITH_WEB3FORMS_ACCESS_KEY";
+  const ENDPOINT = "https://api.web3forms.com/submit";
+  const PREFIX_RE = /^!isiLive:(\d+)!/;
+  const SUPPORTED_VERSION = 1;
+
+  const TEXTS = {
+    en: {
+      title: "Bug report",
+      lead: "In game: type /isilive report, press Ctrl+C, then paste here and click Send.",
+      code: "Report text",
+      preview: "Show what will be sent",
+      desc: "What happened?",
+      optional: "(optional)",
+      contact: "Contact for questions",
+      contactHint: "(optional, e.g. Discord or e-mail)",
+      send: "Send",
+      download: "Download as file",
+      privacy: "The report is only used to fix bugs. Character names are already replaced in game (SELF, P1, P2, …). It is sent by e-mail to the developer and deleted once the bug is fixed.",
+      ok: (e, l) => `Report recognised: ${e} errors, ${l} log lines.`,
+      notIsiLive: "This is not an isiLive report. Copy the text from /isilive report.",
+      truncated: "The text is cut off. Click into the field in game, press Ctrl+A, then Ctrl+C, and paste again.",
+      newer: "This report comes from a newer isiLive version. Please reload this page.",
+      broken: "The text could not be read. Copy it again in game.",
+      noBrowser: "This browser cannot unpack the report. Please use a current Chrome, Firefox, Edge or Safari.",
+      sending: "Sending…",
+      sent: "Thank you! The report has been sent.",
+      failed: (m) => `Sending failed (${m}). You can download the report and post it on GitHub or CurseForge instead.`,
+      notConfigured: "Sending is not set up yet. Please download the report and post it on GitHub or CurseForge.",
+    },
+    de: {
+      title: "Fehlerbericht",
+      lead: "Im Spiel: /isilive report eingeben, Strg+C drücken, hier einfügen und auf Senden klicken.",
+      code: "Berichtstext",
+      preview: "Anzeigen, was gesendet wird",
+      desc: "Was ist passiert?",
+      optional: "(optional)",
+      contact: "Kontakt für Rückfragen",
+      contactHint: "(optional, z. B. Discord oder E-Mail)",
+      send: "Senden",
+      download: "Als Datei herunterladen",
+      privacy: "Der Bericht dient nur der Fehlersuche. Charakternamen sind schon im Spiel ersetzt (SELF, P1, P2, …). Er geht per E-Mail an den Entwickler und wird nach dem Fix gelöscht.",
+      ok: (e, l) => `Bericht erkannt: ${e} Fehler, ${l} Logzeilen.`,
+      notIsiLive: "Das ist kein isiLive-Bericht. Bitte den Text aus /isilive report kopieren.",
+      truncated: "Der Text ist abgeschnitten. Im Spiel ins Feld klicken, Strg+A und dann Strg+C drücken und erneut einfügen.",
+      newer: "Dieser Bericht stammt von einer neueren isiLive-Version. Bitte die Seite neu laden.",
+      broken: "Der Text konnte nicht gelesen werden. Bitte im Spiel neu kopieren.",
+      noBrowser: "Dieser Browser kann den Bericht nicht entpacken. Bitte einen aktuellen Chrome, Firefox, Edge oder Safari nutzen.",
+      sending: "Wird gesendet…",
+      sent: "Danke! Der Bericht wurde gesendet.",
+      failed: (m) => `Senden fehlgeschlagen (${m}). Du kannst den Bericht herunterladen und stattdessen auf GitHub oder CurseForge posten.`,
+      notConfigured: "Das Senden ist noch nicht eingerichtet. Bitte den Bericht herunterladen und auf GitHub oder CurseForge posten.",
+    },
+    fr: {
+      title: "Rapport de bug",
+      lead: "En jeu : tapez /isilive report, appuyez sur Ctrl+C, collez ici et cliquez sur Envoyer.",
+      code: "Texte du rapport",
+      preview: "Afficher ce qui sera envoyé",
+      desc: "Que s'est-il passé ?",
+      optional: "(facultatif)",
+      contact: "Contact pour les questions",
+      contactHint: "(facultatif, p. ex. Discord ou e-mail)",
+      send: "Envoyer",
+      download: "Télécharger le fichier",
+      privacy: "Le rapport sert uniquement à corriger des bugs. Les noms de personnages sont déjà remplacés en jeu (SELF, P1, P2, …). Il est envoyé par e-mail au développeur et supprimé une fois le bug corrigé.",
+      ok: (e, l) => `Rapport reconnu : ${e} erreurs, ${l} lignes de journal.`,
+      notIsiLive: "Ce n'est pas un rapport isiLive. Copiez le texte de /isilive report.",
+      truncated: "Le texte est coupé. Cliquez dans le champ en jeu, appuyez sur Ctrl+A puis Ctrl+C et collez à nouveau.",
+      newer: "Ce rapport vient d'une version plus récente d'isiLive. Rechargez cette page.",
+      broken: "Le texte n'a pas pu être lu. Copiez-le à nouveau en jeu.",
+      noBrowser: "Ce navigateur ne peut pas décompresser le rapport. Utilisez un Chrome, Firefox, Edge ou Safari récent.",
+      sending: "Envoi…",
+      sent: "Merci ! Le rapport a été envoyé.",
+      failed: (m) => `Échec de l'envoi (${m}). Vous pouvez télécharger le rapport et le publier sur GitHub ou CurseForge.`,
+      notConfigured: "L'envoi n'est pas encore configuré. Téléchargez le rapport et publiez-le sur GitHub ou CurseForge.",
+    },
+    ru: {
+      title: "Отчёт об ошибке",
+      lead: "В игре: введите /isilive report, нажмите Ctrl+C, вставьте сюда и нажмите «Отправить».",
+      code: "Текст отчёта",
+      preview: "Показать, что будет отправлено",
+      desc: "Что произошло?",
+      optional: "(необязательно)",
+      contact: "Контакт для вопросов",
+      contactHint: "(необязательно, напр. Discord или e-mail)",
+      send: "Отправить",
+      download: "Скачать файлом",
+      privacy: "Отчёт используется только для исправления ошибок. Имена персонажей уже заменены в игре (SELF, P1, P2, …). Он отправляется разработчику по e-mail и удаляется после исправления.",
+      ok: (e, l) => `Отчёт распознан: ошибок ${e}, строк лога ${l}.`,
+      notIsiLive: "Это не отчёт isiLive. Скопируйте текст из /isilive report.",
+      truncated: "Текст обрезан. В игре щёлкните в поле, нажмите Ctrl+A, затем Ctrl+C и вставьте снова.",
+      newer: "Отчёт создан более новой версией isiLive. Перезагрузите страницу.",
+      broken: "Не удалось прочитать текст. Скопируйте его в игре ещё раз.",
+      noBrowser: "Этот браузер не может распаковать отчёт. Используйте актуальный Chrome, Firefox, Edge или Safari.",
+      sending: "Отправка…",
+      sent: "Спасибо! Отчёт отправлен.",
+      failed: (m) => `Не удалось отправить (${m}). Скачайте отчёт и опубликуйте его на GitHub или CurseForge.`,
+      notConfigured: "Отправка ещё не настроена. Скачайте отчёт и опубликуйте его на GitHub или CurseForge.",
+    },
+    tr: {
+      title: "Hata raporu",
+      lead: "Oyunda: /isilive report yaz, Ctrl+C'ye bas, buraya yapıştır ve Gönder'e tıkla.",
+      code: "Rapor metni",
+      preview: "Gönderilecekleri göster",
+      desc: "Ne oldu?",
+      optional: "(isteğe bağlı)",
+      contact: "Sorular için iletişim",
+      contactHint: "(isteğe bağlı, ör. Discord veya e-posta)",
+      send: "Gönder",
+      download: "Dosya olarak indir",
+      privacy: "Rapor yalnızca hata düzeltmek için kullanılır. Karakter adları oyunda zaten değiştirildi (SELF, P1, P2, …). Geliştiriciye e-postayla gönderilir ve hata düzeltilince silinir.",
+      ok: (e, l) => `Rapor tanındı: ${e} hata, ${l} günlük satırı.`,
+      notIsiLive: "Bu bir isiLive raporu değil. /isilive report metnini kopyala.",
+      truncated: "Metin kesilmiş. Oyunda alana tıkla, Ctrl+A sonra Ctrl+C'ye bas ve tekrar yapıştır.",
+      newer: "Bu rapor daha yeni bir isiLive sürümünden. Lütfen sayfayı yenile.",
+      broken: "Metin okunamadı. Oyunda tekrar kopyala.",
+      noBrowser: "Bu tarayıcı raporu açamıyor. Güncel bir Chrome, Firefox, Edge veya Safari kullan.",
+      sending: "Gönderiliyor…",
+      sent: "Teşekkürler! Rapor gönderildi.",
+      failed: (m) => `Gönderilemedi (${m}). Raporu indirip GitHub veya CurseForge'da paylaşabilirsin.`,
+      notConfigured: "Gönderme henüz ayarlanmadı. Raporu indirip GitHub veya CurseForge'da paylaş.",
+    },
+  };
+
+  const langTag = (navigator.language || "en").slice(0, 2).toLowerCase();
+  const T = TEXTS[langTag] || TEXTS.en;
+  document.documentElement.lang = TEXTS[langTag] ? langTag : "en";
+
+  const $ = (id) => document.getElementById(id);
+  const setText = (id, text) => { $(id).textContent = text; };
+  setText("t-title", T.title);
+  setText("t-lead", T.lead);
+  setText("t-code", T.code);
+  setText("t-preview", T.preview);
+  setText("t-desc", T.desc);
+  setText("t-optional", T.optional);
+  setText("t-contact", T.contact);
+  setText("t-contact-hint", T.contactHint);
+  setText("send", T.send);
+  setText("download", T.download);
+  setText("t-privacy", T.privacy);
+  document.title = "isiLive " + T.title;
+
+  const codeEl = $("code");
+  const statusEl = $("status");
+  const sendBtn = $("send");
+  const downloadBtn = $("download");
+  const sendStatus = $("sendStatus");
+  const previewBox = $("previewBox");
+  const previewEl = $("preview");
+
+  let reportText = null;
+  let parseToken = 0;
+
+  function setStatus(el, kind, text) {
+    el.className = "status" + (kind ? " " + kind : "");
+    el.textContent = text || "";
+  }
+
+  // Shared with tests: returns { ok, text } or { ok: false, reason }.
+  async function decodeReport(raw) {
+    const input = String(raw || "").replace(/\s+/g, "");
+    if (!input) return { ok: false, reason: "empty" };
+    const prefix = input.match(PREFIX_RE);
+    if (!prefix) return { ok: false, reason: "notIsiLive" };
+    const version = Number(prefix[1]);
+    if (version > SUPPORTED_VERSION) return { ok: false, reason: "newer" };
+    const suffix = "!End:isiLive:" + version + "!";
+    if (!input.endsWith(suffix)) return { ok: false, reason: "truncated" };
+    const body = input.slice(prefix[0].length, input.length - suffix.length);
+    if (typeof DecompressionStream === "undefined") return { ok: false, reason: "noBrowser" };
+    try {
+      const binary = atob(body);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+      const text = await new Response(stream).text();
+      if (!text.startsWith("isiLive bug report")) return { ok: false, reason: "broken" };
+      return { ok: true, text };
+    } catch (_err) {
+      return { ok: false, reason: "broken" };
+    }
+  }
+  window.isiLiveDecodeReport = decodeReport;
+
+  function countFromHeader(text, key) {
+    const m = text.match(new RegExp("\\b" + key + "=(\\d+)"));
+    return m ? Number(m[1]) : 0;
+  }
+
+  async function onInput() {
+    const token = ++parseToken;
+    reportText = null;
+    sendBtn.disabled = true;
+    downloadBtn.hidden = true;
+    previewBox.hidden = true;
+    setStatus(sendStatus, "", "");
+    const result = await decodeReport(codeEl.value);
+    if (token !== parseToken) return;
+    if (!result.ok) {
+      setStatus(statusEl, result.reason === "empty" ? "" : "bad", result.reason === "empty" ? "" : T[result.reason]);
+      return;
+    }
+    reportText = result.text;
+    const kept = (result.text.match(/== runtime log \(last (\d+)/) || [])[1] || "0";
+    setStatus(statusEl, "ok", T.ok(countFromHeader(result.text, "errors"), kept));
+    previewEl.textContent = result.text;
+    previewBox.hidden = false;
+    downloadBtn.hidden = false;
+    sendBtn.disabled = false;
+  }
+
+  codeEl.addEventListener("input", onInput);
+  codeEl.addEventListener("paste", () => setTimeout(onInput, 0));
+
+  function headerValue(key) {
+    const m = (reportText || "").match(new RegExp("\\b" + key + "=(\\S+)"));
+    return m ? m[1] : "?";
+  }
+
+  downloadBtn.addEventListener("click", () => {
+    if (!reportText) return;
+    const blob = new Blob([buildMessage()], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "isilive-bug-report-" + headerValue("addon") + ".txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  function buildMessage() {
+    const desc = $("desc").value.trim();
+    const contact = $("contact").value.trim();
+    return [
+      "What happened: " + (desc || "-"),
+      "Contact: " + (contact || "-"),
+      "",
+      reportText,
+    ].join("\n");
+  }
+
+  sendBtn.addEventListener("click", async () => {
+    if (!reportText) return;
+    if (ACCESS_KEY.startsWith("REPLACE_")) {
+      setStatus(sendStatus, "warn", T.notConfigured);
+      return;
+    }
+    sendBtn.disabled = true;
+    setStatus(sendStatus, "", T.sending);
+    try {
+      const response = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          access_key: ACCESS_KEY,
+          subject: "isiLive bug report " + headerValue("addon") + " (" + headerValue("locale") + ")",
+          from_name: "isiLive bug report",
+          message: buildMessage(),
+          botcheck: $("botcheck").checked,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.success) {
+        setStatus(sendStatus, "ok", T.sent);
+        codeEl.value = "";
+        reportText = null;
+        previewBox.hidden = true;
+        downloadBtn.hidden = true;
+        setStatus(statusEl, "", "");
+        return;
+      }
+      setStatus(sendStatus, "bad", T.failed(data.message || ("HTTP " + response.status)));
+    } catch (err) {
+      setStatus(sendStatus, "bad", T.failed(err && err.message ? err.message : "network"));
+    }
+    sendBtn.disabled = !reportText;
+  });
+})();
+</script>
+</body>
+</html>
